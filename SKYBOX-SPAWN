@@ -1,9 +1,3 @@
---[[ 
-    CUBNIT SKYBOX - MODO MINIMALISTA V13
-    INTERFACE: Apenas ícone (ID: 85260943538226)
-    LÓGICA: Sem aplicação de camisa, apenas deformação de malha.
-]]
-
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
@@ -12,19 +6,29 @@ local lp = Players.LocalPlayer
 -- --- CONFIGURAÇÕES DE ASSETS ---
 local ASSETS = {
     TORSO = 100839513065432,
+    RIGHT_LEG = 86276701020724,
+    LEFT_LEG = 78409653958165,
+    LEFT_ARM = 78300682916056,
+    RIGHT_ARM = 123402086843885,
     ANIM_ID = "rbxassetid://70883871260184",
     ICON_ID = "rbxassetid://85260943538226"
 }
 
--- --- VARIÁVEIS DE ESTADO ---
+-- --- VARIÁVEIS DE ESTADO E MEMÓRIA ---
 local skyActive = false
 local currentTrack = nil
 local lastClick = 0
 local doubleClickTime = 0.4 
 
--- --- CRIAÇÃO DA UI INVISÍVEL ---
+local savedSkin = {
+    Shirt = nil,
+    Pants = nil,
+    Body = nil
+}
+
+-- --- CRIAÇÃO DA UI ---
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "CubnitMinimalSky"
+ScreenGui.Name = "CubnitSkinRestoreSky"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = game:GetService("CoreGui")
 
@@ -32,12 +36,37 @@ local FloatingButton = Instance.new("ImageButton")
 FloatingButton.Name = "SkyToggleButton"
 FloatingButton.Size = UDim2.new(0, 65, 0, 65) 
 FloatingButton.Position = UDim2.new(0.5, -32, 0.1, 0)
-FloatingButton.BackgroundTransparency = 1 -- Fundo 100% transparente
+FloatingButton.BackgroundTransparency = 1
 FloatingButton.BorderSizePixel = 0
 FloatingButton.Image = ASSETS.ICON_ID
 FloatingButton.Active = true
 FloatingButton.Draggable = true 
 FloatingButton.Parent = ScreenGui
+
+-- --- FUNÇÕES DE MEMÓRIA DE SKIN ---
+
+local function SaveCurrentSkin()
+    local char = lp.Character
+    if not char then return end
+    
+    pcall(function()
+        local shirt = char:FindFirstChildOfClass("Shirt")
+        local pants = char:FindFirstChildOfClass("Pants")
+        
+        if shirt then savedSkin.Shirt = shirt.ShirtTemplate end
+        if pants then savedSkin.Pants = pants.PantsTemplate end
+    end)
+end
+
+local function RestoreSkin()
+    local RS = game:GetService("ReplicatedStorage")
+    local remotes = RS:WaitForChild("Remotes")
+    
+    pcall(function()
+        remotes.ResetCharacterAppearance:FireServer()
+        task.wait(0.2)
+    end)
+end
 
 -- --- FUNÇÕES CORE ---
 
@@ -48,41 +77,51 @@ local function ToggleSkybox()
     local RS = game:GetService("ReplicatedStorage")
     
     if not skyActive then
-        -- ATIVAR
-        skyActive = true
+        -- SALVAR SKIN ANTES DE ATIVAR
+        SaveCurrentSkin()
         
+        skyActive = true
         pcall(function()
-            -- Removido WearShirt conforme solicitado
-            RS.Remotes.ChangeCharacterBody:InvokeServer(unpack({{ASSETS.TORSO}}))
+            -- Envia a tabela com todas as partes do corpo do Nuke para o servidor do Brookhaven
+            local bodyParts = {
+                ASSETS.TORSO,
+                ASSETS.RIGHT_LEG,
+                ASSETS.LEFT_LEG,
+                ASSETS.LEFT_ARM,
+                ASSETS.RIGHT_ARM
+            }
+            RS.Remotes.ChangeCharacterBody:InvokeServer(unpack({bodyParts}))
             
-            local anim = Instance.new("Animation")
-            anim.AnimationId = ASSETS.ANIM_ID
-            currentTrack = animator:LoadAnimation(anim)
-            currentTrack.Priority = Enum.AnimationPriority.Action4
-            currentTrack.Looped = true
-            currentTrack:Play()
+            -- Executa a Animação
+            if animator then
+                local anim = Instance.new("Animation")
+                anim.AnimationId = ASSETS.ANIM_ID
+                currentTrack = animator:LoadAnimation(anim)
+                currentTrack.Priority = Enum.AnimationPriority.Action4
+                currentTrack.Looped = true
+                currentTrack:Play()
+            end
         end)
     else
-        -- DESATIVAR
+        -- DESATIVAR E RESTAURAR
         skyActive = false
         if currentTrack then currentTrack:Stop() end
-        RS.Remotes.ResetCharacterAppearance:FireServer()
+        RestoreSkin()
     end
 end
 
 local function ShutdownScript()
     skyActive = false
     if currentTrack then currentTrack:Stop() end
-    game:GetService("ReplicatedStorage").Remotes.ResetCharacterAppearance:FireServer()
+    RestoreSkin()
     ScreenGui:Destroy()
 end
 
--- --- LÓGICA DE CLIQUE (TOGGLE / SHUTDOWN) ---
+-- --- LÓGICA DE CLIQUE ---
 
 FloatingButton.MouseButton1Click:Connect(function()
     local currentTime = tick()
     
-    -- Clique Duplo para fechar
     if (currentTime - lastClick) < doubleClickTime then
         ShutdownScript()
         return
@@ -90,7 +129,6 @@ FloatingButton.MouseButton1Click:Connect(function()
     
     lastClick = currentTime
     
-    -- Delay para validar clique único
     task.wait(doubleClickTime)
     if (tick() - lastClick) >= doubleClickTime then
         if ScreenGui.Parent then 
@@ -99,14 +137,16 @@ FloatingButton.MouseButton1Click:Connect(function()
     end
 end)
 
--- Loop de manutenção visual (Foco no Torso)
+-- Loop de manutenção visual para evitar glitches visuais nas extremidades padrão
 RunService.RenderStepped:Connect(function()
     if skyActive and lp.Character then
         pcall(function()
             for _, part in pairs(lp.Character:GetChildren()) do
-                -- Esconde membros para a malha do torso ser a única visível no céu
                 if part:IsA("BasePart") and (part.Name:find("Arm") or part.Name:find("Leg")) then
-                    part.Transparency = 1
+                    -- Mantém as partes originais invisíveis caso o pacote sobreponha
+                    if not part:FindFirstChildOfClass("WrapLayer") then 
+                        part.Transparency = 1
+                    end
                 end
             end
         end)
