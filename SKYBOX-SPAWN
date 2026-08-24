@@ -1,150 +1,319 @@
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local CoreGui = game:GetService("CoreGui")
 local lp = Players.LocalPlayer
 
--- --- CONFIGURAÇÕES DE ASSETS ---
+-- --- CONFIGURAÇÕES DE ASSETS E IDS ---
 local ASSETS = {
-    TORSO = 100839513065432,
-    RIGHT_LEG = 86276701020724,
-    LEFT_LEG = 78409653958165,
+    TORSO = 96655874457685,
     LEFT_ARM = 78300682916056,
     RIGHT_ARM = 123402086843885,
+    LEFT_LEG = 78409653958165,
+    RIGHT_LEG = 86276701020724,
+    HEAD = 120668655481073,
     ANIM_ID = "rbxassetid://70883871260184",
-    ICON_ID = "rbxassetid://85260943538226"
+
+    TOGGLE_ICON = "rbxassetid://131123222466538",
+    CHARACTER_PREVIEW = "rbxassetid://115682879236295",
+    CLOSE_ICON = "rbxassetid://98235327129327",
+    SUN_SYMBOL = "rbxassetid://107617915493772"
 }
 
--- --- VARIÁVEIS DE ESTADO E MEMÓRIA ---
+-- --- VARIÁVEIS DE ESTADO ---
 local skyActive = false
 local currentTrack = nil
-local lastClick = 0
-local doubleClickTime = 0.4 
+local selectedType = "NUKE"
+local renderConnection = nil
 
-local savedSkin = {
-    Shirt = nil,
-    Pants = nil,
-    Body = nil
-}
-
--- --- CRIAÇÃO DA UI ---
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "CubnitSkinRestoreSky"
-ScreenGui.ResetOnSpawn = false
-ScreenGui.Parent = game:GetService("CoreGui")
-
-local FloatingButton = Instance.new("ImageButton")
-FloatingButton.Name = "SkyToggleButton"
-FloatingButton.Size = UDim2.new(0, 65, 0, 65) 
-FloatingButton.Position = UDim2.new(0.5, -32, 0.1, 0)
-FloatingButton.BackgroundTransparency = 1
-FloatingButton.BorderSizePixel = 0
-FloatingButton.Image = ASSETS.ICON_ID
-FloatingButton.Active = true
-FloatingButton.Draggable = true 
-FloatingButton.Parent = ScreenGui
-
--- --- FUNÇÕES DE MEMÓRIA DE SKIN ---
-
-local function SaveCurrentSkin()
-    local char = lp.Character
-    if not char then return end
-    
-    pcall(function()
-        local shirt = char:FindFirstChildOfClass("Shirt")
-        local pants = char:FindFirstChildOfClass("Pants")
-        
-        if shirt then savedSkin.Shirt = shirt.ShirtTemplate end
-        if pants then savedSkin.Pants = pants.PantsTemplate end
-    end)
+-- Destruir instância anterior se já existir
+if CoreGui:FindFirstChild("SkyBoxSpwnCubGui") then
+    CoreGui.SkyBoxSpwnCubGui:Destroy()
 end
+
+-- --- CRIAÇÃO DA INTERFACE ---
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "SkyBoxSpwnCubGui"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = CoreGui
+
+-- Botão Flutuante (Abrir / Alternar Painel)
+local ToggleButton = Instance.new("ImageButton")
+ToggleButton.Name = "ToggleButton"
+ToggleButton.Size = UDim2.new(0, 60, 0, 60)
+ToggleButton.Position = UDim2.new(0.05, 0, 0.4, 0)
+ToggleButton.BackgroundTransparency = 1
+ToggleButton.Image = ASSETS.TOGGLE_ICON
+ToggleButton.Active = true
+ToggleButton.Draggable = true
+ToggleButton.Parent = ScreenGui
+
+-- Painel Principal
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 480, 0, 270)
+MainFrame.Position = UDim2.new(0.5, -240, 0.5, -135)
+MainFrame.BackgroundColor3 = Color3.fromRGB(5, 5, 5)
+MainFrame.BorderColor3 = Color3.fromRGB(255, 255, 255)
+MainFrame.BorderSizePixel = 2
+MainFrame.Visible = false
+MainFrame.Active = true
+MainFrame.Draggable = true
+MainFrame.Parent = ScreenGui
+
+-- Título Principal
+local TitleLabel = Instance.new("TextLabel")
+TitleLabel.Size = UDim2.new(0, 320, 0, 20)
+TitleLabel.Position = UDim2.new(0, 10, 0, 8)
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.Text = "SKYBOX PROJECT 0 . 0 . 1"
+TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+TitleLabel.TextSize = 12
+TitleLabel.Font = Enum.Font.Arcade
+TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+TitleLabel.Parent = MainFrame
+
+-- Botão de Fechar 100% (X)
+local CloseBtn = Instance.new("ImageButton")
+CloseBtn.Name = "CloseBtn"
+CloseBtn.Size = UDim2.new(0, 22, 0, 22)
+CloseBtn.Position = UDim2.new(1, -28, 0, 6)
+CloseBtn.BackgroundTransparency = 1
+CloseBtn.Image = ASSETS.CLOSE_ICON
+CloseBtn.Parent = MainFrame
+
+-- Painel Esquerdo (Tipos)
+local TypesFrame = Instance.new("Frame")
+TypesFrame.Size = UDim2.new(0, 105, 0, 190)
+TypesFrame.Position = UDim2.new(0, 10, 0, 35)
+TypesFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+TypesFrame.BorderColor3 = Color3.fromRGB(80, 80, 80)
+TypesFrame.Parent = MainFrame
+
+local TypesTitle = Instance.new("TextLabel")
+TypesTitle.Size = UDim2.new(1, 0, 0, 20)
+TypesTitle.BackgroundTransparency = 1
+TypesTitle.Text = "── TIPOS ──"
+TypesTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+TypesTitle.TextSize = 9
+TypesTitle.Font = Enum.Font.Arcade
+TypesTitle.Parent = TypesFrame
+
+local NukeBtn = Instance.new("TextButton")
+NukeBtn.Size = UDim2.new(0.85, 0, 0, 26)
+NukeBtn.Position = UDim2.new(0.075, 0, 0.15, 0)
+NukeBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+NukeBtn.BorderColor3 = Color3.fromRGB(255, 255, 255)
+NukeBtn.BorderSizePixel = 1
+NukeBtn.Text = "NUKE"
+NukeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+NukeBtn.TextSize = 10
+NukeBtn.Font = Enum.Font.Arcade
+NukeBtn.Parent = TypesFrame
+
+-- Painel Central - Preview do Personagem (Aumentado de 170x185 para 210x225)
+local CharacterImg = Instance.new("ImageLabel")
+CharacterImg.Name = "CharacterImg"
+CharacterImg.Size = UDim2.new(0, 210, 0, 225)
+CharacterImg.Position = UDim2.new(0.5, -105, 0, 25)
+CharacterImg.BackgroundTransparency = 1
+CharacterImg.Image = ASSETS.CHARACTER_PREVIEW
+CharacterImg.ScaleType = Enum.ScaleType.Fit
+CharacterImg.ZIndex = 1
+CharacterImg.Parent = MainFrame
+
+-- Painel Direito (Info e Ações)
+local InfoFrame = Instance.new("Frame")
+InfoFrame.Size = UDim2.new(0, 130, 0, 190)
+InfoFrame.Position = UDim2.new(1, -140, 0, 35)
+InfoFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+InfoFrame.BorderColor3 = Color3.fromRGB(80, 80, 80)
+InfoFrame.Parent = MainFrame
+
+local InfoTitle = Instance.new("TextLabel")
+InfoTitle.Size = UDim2.new(1, 0, 0, 20)
+InfoTitle.BackgroundTransparency = 1
+InfoTitle.Text = "── INFO ──"
+InfoTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+InfoTitle.TextSize = 9
+InfoTitle.Font = Enum.Font.Arcade
+InfoTitle.Parent = InfoFrame
+
+-- Sistema de Rolagem (ScrollingFrame)
+local InfoScroll = Instance.new("ScrollingFrame")
+InfoScroll.Size = UDim2.new(0.9, 0, 0, 92)
+InfoScroll.Position = UDim2.new(0.05, 0, 0.12, 0)
+InfoScroll.BackgroundTransparency = 1
+InfoScroll.BorderSizePixel = 0
+InfoScroll.ScrollBarThickness = 3
+InfoScroll.ScrollBarImageColor3 = Color3.fromRGB(255, 255, 255)
+InfoScroll.CanvasSize = UDim2.new(0, 0, 0, 170)
+InfoScroll.Parent = InfoFrame
+
+local InfoDesc = Instance.new("TextLabel")
+InfoDesc.Size = UDim2.new(1, -6, 0, 165)
+InfoDesc.Position = UDim2.new(0, 0, 0, 0)
+InfoDesc.BackgroundTransparency = 1
+InfoDesc.Text = "SkyBox\n\nScript de SkyBox e uma tentativa de alcancar aos ceus atraves da expansao finita do Corpo e com uma acao/movimento dado aos seres antigos aprendido e descoberto atraves da falhas da Matrix."
+InfoDesc.TextColor3 = Color3.fromRGB(255, 255, 255)
+InfoDesc.TextSize = 9
+InfoDesc.Font = Enum.Font.Arcade
+InfoDesc.TextWrapped = true
+InfoDesc.TextYAlignment = Enum.TextYAlignment.Top
+InfoDesc.Parent = InfoScroll
+
+-- Botões de Ação
+local ApplyBtn = Instance.new("TextButton")
+ApplyBtn.Size = UDim2.new(0.9, 0, 0, 24)
+ApplyBtn.Position = UDim2.new(0.05, 0, 0.63, 0)
+ApplyBtn.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
+ApplyBtn.BorderColor3 = Color3.fromRGB(255, 255, 255)
+ApplyBtn.Text = "APLICAR"
+ApplyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ApplyBtn.TextSize = 9
+ApplyBtn.Font = Enum.Font.Arcade
+ApplyBtn.Parent = InfoFrame
+
+local RemoveBtn = Instance.new("TextButton")
+RemoveBtn.Size = UDim2.new(0.9, 0, 0, 22)
+RemoveBtn.Position = UDim2.new(0.05, 0, 0.78, 0)
+RemoveBtn.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+RemoveBtn.BorderColor3 = Color3.fromRGB(60, 60, 60)
+RemoveBtn.Text = "REMOVER SKYBOX"
+RemoveBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+RemoveBtn.TextSize = 7
+RemoveBtn.Font = Enum.Font.Arcade
+RemoveBtn.Parent = InfoFrame
+
+-- Símbolos de Sol nos Cantos Inferiores
+local SunLeft = Instance.new("ImageLabel")
+SunLeft.Size = UDim2.new(0, 22, 0, 22)
+SunLeft.Position = UDim2.new(0, 10, 1, -28)
+SunLeft.BackgroundTransparency = 1
+SunLeft.Image = ASSETS.SUN_SYMBOL
+SunLeft.ZIndex = 2
+SunLeft.Parent = MainFrame
+
+local SunRight = Instance.new("ImageLabel")
+SunRight.Size = UDim2.new(0, 22, 0, 22)
+SunRight.Position = UDim2.new(1, -32, 1, -28)
+SunRight.BackgroundTransparency = 1
+SunRight.Image = ASSETS.SUN_SYMBOL
+SunRight.ZIndex = 2
+SunRight.Parent = MainFrame
+
+-- --- FUNÇÕES CORE DO SKYBOX ---
 
 local function RestoreSkin()
-    local RS = game:GetService("ReplicatedStorage")
-    local remotes = RS:WaitForChild("Remotes")
-    
-    pcall(function()
-        remotes.ResetCharacterAppearance:FireServer()
-        task.wait(0.2)
-    end)
+    local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+    if remotes and remotes:FindFirstChild("ResetCharacterAppearance") then
+        pcall(function()
+            remotes.ResetCharacterAppearance:FireServer()
+        end)
+    end
 end
 
--- --- FUNÇÕES CORE ---
+local function ApplySkybox()
+    if skyActive then return end
+    skyActive = true
 
-local function ToggleSkybox()
     local char = lp.Character
     local hum = char and char:FindFirstChildOfClass("Humanoid")
     local animator = hum and hum:FindFirstChildOfClass("Animator")
-    local RS = game:GetService("ReplicatedStorage")
-    
-    if not skyActive then
-        -- SALVAR SKIN ANTES DE ATIVAR
-        SaveCurrentSkin()
-        
-        skyActive = true
-        pcall(function()
-            -- Envia a tabela com todas as partes do corpo do Nuke para o servidor do Brookhaven
+    local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+
+    pcall(function()
+        if remotes and remotes:FindFirstChild("ChangeCharacterBody") then
             local bodyParts = {
                 ASSETS.TORSO,
                 ASSETS.RIGHT_LEG,
                 ASSETS.LEFT_LEG,
                 ASSETS.LEFT_ARM,
-                ASSETS.RIGHT_ARM
+                ASSETS.RIGHT_ARM,
+                ASSETS.HEAD
             }
-            RS.Remotes.ChangeCharacterBody:InvokeServer(unpack({bodyParts}))
-            
-            -- Executa a Animação
-            if animator then
-                local anim = Instance.new("Animation")
-                anim.AnimationId = ASSETS.ANIM_ID
-                currentTrack = animator:LoadAnimation(anim)
-                currentTrack.Priority = Enum.AnimationPriority.Action4
-                currentTrack.Looped = true
-                currentTrack:Play()
-            end
-        end)
-    else
-        -- DESATIVAR E RESTAURAR
-        skyActive = false
-        if currentTrack then currentTrack:Stop() end
-        RestoreSkin()
-    end
+            remotes.ChangeCharacterBody:InvokeServer(bodyParts)
+        end
+
+        if animator then
+            local anim = Instance.new("Animation")
+            anim.AnimationId = ASSETS.ANIM_ID
+            currentTrack = animator:LoadAnimation(anim)
+            currentTrack.Priority = Enum.AnimationPriority.Action4
+            currentTrack.Looped = true
+            currentTrack:Play()
+        end
+    end)
+
+    RemoveBtn.BorderColor3 = Color3.fromRGB(255, 255, 255)
 end
 
+local function RemoveSkybox()
+    if not skyActive then return end
+    skyActive = false
+
+    if currentTrack then
+        currentTrack:Stop()
+        currentTrack = nil
+    end
+
+    RestoreSkin()
+
+    RemoveBtn.BorderColor3 = Color3.fromRGB(60, 60, 60)
+end
+
+-- Função para encerrar e destruir o script 100%
 local function ShutdownScript()
     skyActive = false
-    if currentTrack then currentTrack:Stop() end
+    if currentTrack then
+        currentTrack:Stop()
+        currentTrack = nil
+    end
+    
     RestoreSkin()
+    
+    if renderConnection then
+        renderConnection:Disconnect()
+    end
+    
     ScreenGui:Destroy()
 end
 
--- --- LÓGICA DE CLIQUE ---
+-- --- EVENTOS DA UI ---
 
-FloatingButton.MouseButton1Click:Connect(function()
-    local currentTime = tick()
-    
-    if (currentTime - lastClick) < doubleClickTime then
-        ShutdownScript()
-        return
-    end
-    
-    lastClick = currentTime
-    
-    task.wait(doubleClickTime)
-    if (tick() - lastClick) >= doubleClickTime then
-        if ScreenGui.Parent then 
-            ToggleSkybox()
-        end
+-- Botão Flutuante: Alterna a visibilidade do painel
+ToggleButton.MouseButton1Click:Connect(function()
+    MainFrame.Visible = not MainFrame.Visible
+end)
+
+-- Botão Fechar (X): Desliga o script 100% (Restaura o personagem e remove a Interface)
+CloseBtn.MouseButton1Click:Connect(function()
+    ShutdownScript()
+end)
+
+NukeBtn.MouseButton1Click:Connect(function()
+    selectedType = "NUKE"
+    NukeBtn.BorderColor3 = Color3.fromRGB(255, 255, 255)
+end)
+
+ApplyBtn.MouseButton1Click:Connect(function()
+    if selectedType == "NUKE" then
+        ApplySkybox()
     end
 end)
 
--- Loop de manutenção visual para evitar glitches visuais nas extremidades padrão
-RunService.RenderStepped:Connect(function()
+RemoveBtn.MouseButton1Click:Connect(function()
+    RemoveSkybox()
+end)
+
+-- Loop de manutenção visual
+renderConnection = RunService.RenderStepped:Connect(function()
     if skyActive and lp.Character then
         pcall(function()
             for _, part in pairs(lp.Character:GetChildren()) do
                 if part:IsA("BasePart") and (part.Name:find("Arm") or part.Name:find("Leg")) then
-                    -- Mantém as partes originais invisíveis caso o pacote sobreponha
-                    if not part:FindFirstChildOfClass("WrapLayer") then 
+                    if not part:FindFirstChildOfClass("WrapLayer") then
                         part.Transparency = 1
                     end
                 end
