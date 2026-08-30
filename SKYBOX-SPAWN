@@ -112,7 +112,7 @@ NukeBtn.TextSize = 10
 NukeBtn.Font = Enum.Font.Arcade
 NukeBtn.Parent = TypesFrame
 
--- Painel Central - Preview do Personagem (Aumentado de 170x185 para 210x225)
+-- Painel Central - Preview do Personagem
 local CharacterImg = Instance.new("ImageLabel")
 CharacterImg.Name = "CharacterImg"
 CharacterImg.Size = UDim2.new(0, 210, 0, 225)
@@ -155,7 +155,7 @@ local InfoDesc = Instance.new("TextLabel")
 InfoDesc.Size = UDim2.new(1, -6, 0, 165)
 InfoDesc.Position = UDim2.new(0, 0, 0, 0)
 InfoDesc.BackgroundTransparency = 1
-InfoDesc.Text = "SkyBox\n\nScript de SkyBox e uma tentativa de alcancar aos ceus atraves da expansao finita do Corpo e com uma acao/movimento dado aos seres antigos aprendido e descoberto atraves da falhas da Matrix."
+InfoDesc.Text = "SkyBox\n\nScript de SkyBox e uma tentativa de alcancar aos ceus atraves da expansao finita do Corpo e com uma acao/movimento dado aos seres antigos aprendido e descobeto atraves da falhas da Matrix."
 InfoDesc.TextColor3 = Color3.fromRGB(255, 255, 255)
 InfoDesc.TextSize = 9
 InfoDesc.Font = Enum.Font.Arcade
@@ -263,20 +263,20 @@ local function RemoveSkybox()
     RemoveBtn.BorderColor3 = Color3.fromRGB(60, 60, 60)
 end
 
--- Função para encerrar e destruir o script 100%
+-- Função para encerrar e destruir a GUI mantendo a skin atual
 local function ShutdownScript()
     skyActive = false
+    
     if currentTrack then
         currentTrack:Stop()
         currentTrack = nil
     end
-    
-    RestoreSkin()
-    
+
     if renderConnection then
         renderConnection:Disconnect()
+        renderConnection = nil
     end
-    
+
     ScreenGui:Destroy()
 end
 
@@ -287,7 +287,7 @@ ToggleButton.MouseButton1Click:Connect(function()
     MainFrame.Visible = not MainFrame.Visible
 end)
 
--- Botão Fechar (X): Desliga o script 100% (Restaura o personagem e remove a Interface)
+-- Botão Fechar (X): Encerra o script e apaga a GUI sem resetar a aparência
 CloseBtn.MouseButton1Click:Connect(function()
     ShutdownScript()
 end)
